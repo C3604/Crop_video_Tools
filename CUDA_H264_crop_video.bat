@@ -1,50 +1,103 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 
+rem ç‰‡å¤´è£å‰ªå¼€å§‹æ—¶é—´ï¼ˆç§’ï¼‰
 set StartTime=95
 
-rem ÉèÖÃFFmpegÂ·¾¶£¬È·±£¸ÃÂ·¾¶°üº¬ÓĞÆôÓÃÁËCUDAÖ§³ÖµÄFFmpeg¿ÉÖ´ĞĞÎÄ¼ş
+rem FFmpeg è·¯å¾„ï¼ˆç¡®ä¿ä¸ºæ”¯æŒ CUDA çš„ç‰ˆæœ¬ï¼‰
 set ffmpeg=.\ffmpeg.exe
 
-rem ÉèÖÃÔ´ÎÄ¼ş¼ĞºÍÊä³öÎÄ¼ş¼Ğ
+rem æºã€è¾“å‡ºã€ä¸´æ—¶ ç›®å½•
 set source_folder=.\Videos
 set output_folder=.\Output
 set Temp_folder=.\Temp
 
-rem ´´½¨Êä³öÎÄ¼ş¼Ğ
+rem åˆ›å»ºè¾“å‡ºä¸ä¸´æ—¶ç›®å½•
 if not exist "%output_folder%" mkdir "%output_folder%"
 if not exist "%Temp_folder%" mkdir "%Temp_folder%"
 
-rem Ñ­»·´¦ÀíÃ¿¸öÊÓÆµÎÄ¼ş
+rem æ ¡éªŒ FFmpeg å¯ç”¨
+set "FFMPEG_BIN="
+if exist "%ffmpeg%" (
+    set "FFMPEG_BIN=%ffmpeg%"
+) else (
+    where ffmpeg >nul 2>&1 && set "FFMPEG_BIN=ffmpeg"
+)
+if not defined FFMPEG_BIN (
+    echo [ERROR] æœªæ‰¾åˆ° FFmpegï¼›è¯·é…ç½® ffmpeg.exe è·¯å¾„æˆ–åŠ å…¥ PATH
+    goto :end
+)
+
+rem æ ¡éªŒæºç›®å½•ä¸ MP4 æ–‡ä»¶
+if not exist "%source_folder%" (
+    echo [ERROR] æºç›®å½•ä¸å­˜åœ¨: %source_folder%
+    goto :end
+)
+dir /b "%source_folder%\*.mp4" >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] æœªæ‰¾åˆ° MP4 æ–‡ä»¶: %source_folder%
+    goto :end
+)
+
+rem éå†å¤„ç†æ¯ä¸ªè§†é¢‘æ–‡ä»¶
 for %%i in ("%source_folder%\*.mp4") do (
     set source_file=%%i
     set Temp_file=!Temp_folder!\temp_%%~nxi
     set output_file="%output_folder%\cropped_%%~nxi"
+    set "skip_current="
 
-    rem ²Ã¼ôÆ¬Í·´æÖÁtempÎÄ¼ş¼Ğ£¬ÆôÓÃGPU¼ÓËÙ
-    %ffmpeg% -hwaccel cuvid -c:v h264_cuvid -i "!source_file!" -ss %StartTime% -c copy "!Temp_file!"
+    rem è£å‰ªç‰‡å¤´åˆ°ä¸´æ—¶æ–‡ä»¶ï¼Œä½¿ç”¨ GPU åŠ é€Ÿ
+    "%FFMPEG_BIN%" -v error -hide_banner -y -hwaccel cuvid -c:v h264_cuvid -i "!source_file!" -ss %StartTime% -c copy "!Temp_file!"
+    if errorlevel 1 (
+        echo [ERROR] ç‰‡å¤´è£å‰ªå¤±è´¥: "!source_file!"
+        if exist "!Temp_file!" del /q "!Temp_file!" >nul 2>&1
+        set "skip_current=1"
+    )
 
-    rem Ê¹ÓÃFFmpeg»ñÈ¡ÊÓÆµÊ±³¤£¬ÆôÓÃGPU¼ÓËÙ
-    for /f "tokens=*" %%d in ('%ffmpeg% -hwaccel cuvid -c:v h264_cuvid -i "!Temp_file!" 2^>^&1 ^| find "Duration"') do (
-        set duration_line=%%d
+    if not defined skip_current (
+        rem è¯»å–è§†é¢‘æ—¶é•¿
+        set "duration_line="
+        for /f "tokens=*" %%d in ('"%FFMPEG_BIN%" -hwaccel cuvid -c:v h264_cuvid -i "!Temp_file!" 2^>^&1 ^| find "Duration"') do (
+            set duration_line=%%d
+        )
+        if not defined duration_line (
+            echo [ERROR] æ— æ³•è·å–è§†é¢‘æ—¶é•¿: "!Temp_file!"
+            set "skip_current=1"
+        )
+    )
+
+    if not defined skip_current (
         set duration=!duration_line:Duration=!
         set duration=!duration:~,12!
-
-        rem ½« hh:mm:ss ×ª»»ÎªÃëÊı
+        rem å°† hh:mm:ss è½¬ä¸ºç§’
         for /f "tokens=1-3 delims=:" %%a in ("!duration!") do (
             set /a total_seconds=%%a * 3600 + %%b * 60 + %%c
         )
 
-        rem echo Video: "!input_file!", Duration: !duration! (converted to seconds: !total_seconds!)
+        rem å°¾éƒ¨è£å‰ªå¹¶ç”Ÿæˆè¾“å‡º
+        set /a ClipDuration=total_seconds-126
+        if !ClipDuration! LEQ 0 (
+            echo [WARN] å°¾éƒ¨è£å‰ªæ—¶é•¿ä¸åˆç†ï¼Œç›´æ¥å¤åˆ¶è¾“å‡º: "!output_file!"
+            copy /y "!Temp_file!" !output_file! >nul
+            if errorlevel 1 (
+                echo [ERROR] å¤åˆ¶æ–‡ä»¶å¤±è´¥: "!output_file!"
+            ) else (
+                echo [OK] å·²è¾“å‡º: "!output_file!"
+            )
+        ) else (
+            "%FFMPEG_BIN%" -v error -hide_banner -y -hwaccel cuvid -c:v h264_cuvid -i "!Temp_file!" -ss 0 -t !ClipDuration! -c copy !output_file!
+            if errorlevel 1 (
+                echo [ERROR] å°¾éƒ¨è£å‰ªå¤±è´¥: "!source_file!"
+            ) else (
+                echo [OK] å·²è¾“å‡º: "!output_file!"
+            )
+        )
 
-        rem ÔÚ´ËÌí¼ÓÄãµÄÆäËû²Ù×÷£¬ÀıÈç²Ã¼ôÊÓÆµµÈ
-        set /a EndTime=total_seconds-126
-        %ffmpeg% -hwaccel cuvid -c:v h264_cuvid -i "!Temp_file!" -ss 0 -t !EndTime! -c copy "!output_file!"
-
-        rem Çå¿ÕtempÄ¿Â¼
-        del "!Temp_file!"
+        rem æ¸…ç†ä¸´æ—¶æ–‡ä»¶
+        if exist "!Temp_file!" del /q "!Temp_file!" >nul 2>&1
     )
 )
 
-echo Batch processing completed.
+echo å…¨éƒ¨å¤„ç†å®Œæˆã€‚
 pause
