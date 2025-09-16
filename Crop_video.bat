@@ -1,54 +1,115 @@
 @echo off
 setlocal enabledelayedexpansion
 
-rem ÉèÖÃÆ¬Í·ÇúÊ±³¤£¬µ¥Î»Ãë
+rem ï¿½ï¿½ï¿½ï¿½Æ¬Í·ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
 set StartTime=95
 
-rem ÉèÖÃÆ¬Î²ÇúÊ±³¤£¬µ¥Î»Ãë
-set EndTime=126
+rem ï¿½ï¿½ï¿½ï¿½Æ¬Î²ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½
+set TailTrimSeconds=126
 
-rem ===ÈçÏÂ²ÎÊýÓÃ»§ÎÞÐèÐÞ¸Ä===
+rem ===ï¿½ï¿½ï¿½Â²ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Þ¸ï¿½===
 
-rem ÉèÖÃFFmpegÂ·¾¶
+rem ï¿½ï¿½ï¿½ï¿½FFmpegÂ·ï¿½ï¿½
 set ffmpeg=.\ffmpeg.exe
 
-rem ÉèÖÃÔ´ÎÄ¼þ¼ÐºÍÊä³öÎÄ¼þ¼Ð
+rem ï¿½ï¿½ï¿½ï¿½Ô´ï¿½Ä¼ï¿½ï¿½Ðºï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
 set source_folder=.\Videos
 set output_folder=.\Output
 set Temp_folder=.\Temp
 
-rem ´´½¨Êä³öÎÄ¼þ¼Ð
+rem ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
 if not exist "%output_folder%" mkdir "%output_folder%"
 if not exist "%Temp_folder%" mkdir "%Temp_folder%"
 
-rem Ñ­»·´¦ÀíÃ¿¸öÊÓÆµÎÄ¼þ
+rem ï¿½ï¿½Ö¤FFmpegï¿½ï¿½ï¿½ï¿½
+set "FFMPEG_BIN="
+if exist "%ffmpeg%" (
+    set "FFMPEG_BIN=%ffmpeg%"
+) else (
+    where ffmpeg >nul 2>&1 && set "FFMPEG_BIN=ffmpeg"
+)
+if not defined FFMPEG_BIN (
+    echo [ERROR] FFmpeg Î´ï¿½Òµï¿½ï¿½ï¿½ ï¿½ï¿½È·ï¿½ï¿½ï¿½ï¿½ffmpeg.exeÂ·ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½PATHï¿½ï¿½
+    goto :end
+)
+
+rem ï¿½ï¿½Ö¤Ô´Ä¿Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½ï¿½ï¿½ï¿½ï¿½MP4ï¿½Ä¼ï¿½
+if not exist "%source_folder%" (
+    echo [ERROR] Ô´Ä¿Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Ú£ï¿½ %source_folder%
+    goto :end
+)
+dir /b "%source_folder%\*.mp4" >nul 2>&1
+if errorlevel 1 (
+    echo [WARN] ï¿½ï¿½ï¿½ï¿½ï¿½Òµï¿½MP4ï¿½Ä¼ï¿½ï¿½ï¿½ %source_folder%
+    goto :end
+)
+
+set /a processed=0
+
+rem Ñ­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½Æµï¿½Ä¼ï¿½
 for %%i in ("%source_folder%\*.mp4") do (
     set source_file=%%i
     set Temp_file=!Temp_folder!\temp_%%~nxi
     set output_file="%output_folder%\%%~nxi"
+    set "skip_current="
 
-    rem ²Ã¼ôÆ¬Í·´æÖÁtempÎÄ¼þ¼Ð
-    %ffmpeg% -i "!source_file!" -ss %StartTime% -c copy "!Temp_file!"
+    if exist "!Temp_file!" del /q "!Temp_file!" >nul 2>&1
 
-    rem Ê¹ÓÃFFmpeg»ñÈ¡ÊÓÆµÊ±³¤
-    for /f "tokens=*" %%d in ('%ffmpeg% -i "!Temp_file!" 2^>^&1 ^| find "Duration"') do (
-        set duration_line=%%d
+    rem ï¿½Ã¼ï¿½Æ¬Í·ï¿½ï¿½ï¿½ï¿½tempï¿½Ä¼ï¿½ï¿½ï¿½
+    "%FFMPEG_BIN%" -v error -hide_banner -y -i "!source_file!" -ss %StartTime% -c copy "!Temp_file!"
+    if errorlevel 1 (
+        echo [ERROR] Ç°ï¿½Ã¼ï¿½Ê§ï¿½ï¿½: "!source_file!"
+        if exist "!Temp_file!" del /q "!Temp_file!" >nul 2>&1
+        set "skip_current=1"
+    )
+
+    if not defined skip_current (
+        rem Ê¹ï¿½ï¿½FFmpegï¿½ï¿½È¡ï¿½ï¿½ÆµÊ±ï¿½ï¿½
+        set "duration_line="
+        for /f "tokens=*" %%d in ('"%FFMPEG_BIN%" -i "!Temp_file!" 2^>^&1 ^| find "Duration"') do (
+            set duration_line=%%d
+        )
+        if not defined duration_line (
+            echo [ERROR] ï¿½Þ·ï¿½ï¿½ï¿½È¡ï¿½ï¿½ÆµÊ±ï¿½ï¿½: "!Temp_file!"
+            set "skip_current=1"
+        )
+    )
+
+    if not defined skip_current (
         set duration=!duration_line:Duration=!
         set duration=!duration:~,12!
-
-        rem ½« hh:mm:ss ×ª»»ÎªÃëÊý
+        rem ï¿½ï¿½ hh:mm:ss ×ªï¿½ï¿½Îªï¿½ï¿½ï¿½ï¿½
         for /f "tokens=1-3 delims=:" %%a in ("!duration!") do (
             set /a total_seconds=%%a * 3600 + %%b * 60 + %%c
         )
+        set /a ClipDuration=total_seconds-TailTrimSeconds
 
-        rem ²Ã¼ôÆ¬Î²Çú
-        set /a EndTime=total_seconds-EndTime
-        %ffmpeg% -i "!Temp_file!" -ss 0 -t !EndTime! -c copy "!output_file!"
-
-        rem Çå¿ÕtempÄ¿Â¼
-        del "!Temp_file!"
+        if !ClipDuration! LEQ 0 (
+            echo [WARN] Î²ï¿½Ã¼ï¿½ï¿½ï¿½ï¿½È³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½, Ö±ï¿½Ó¸ï¿½ï¿½Æ³ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½: "!output_file!"
+            copy /y "!Temp_file!" !output_file! >nul
+            if errorlevel 1 (
+                echo [ERROR] ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½Ê§ï¿½ï¿½: "!output_file!"
+            ) else (
+                echo [OK] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: "!output_file!"
+            )
+        ) else (
+            "%FFMPEG_BIN%" -v error -hide_banner -y -i "!Temp_file!" -ss 0 -t !ClipDuration! -c copy !output_file!
+            if errorlevel 1 (
+                echo [ERROR] Î²ï¿½Ã¼ï¿½Ê§ï¿½ï¿½: "!source_file!"
+            ) else (
+                echo [OK] ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½: "!output_file!"
+            )
+        )
     )
+
+    rem ï¿½ï¿½ï¿½tempÄ¿Â¼
+    if exist "!Temp_file!" del /q "!Temp_file!" >nul 2>&1
+    set /a processed+=1
 )
 
-echo È«²¿ÊÓÆµ´¦ÀíÍê³É
+if %processed% EQU 0 (
+    echo Ã»ï¿½Ð½ï¿½ï¿½Îºï¿½ï¿½Ä¼ï¿½ï¿½ï¿½
+) else (
+    echo È«ï¿½ï¿½ï¿½ï¿½Æµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ ï¿½Ü¹ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ %processed% ï¿½ï¿½ï¿½Ä¼ï¿½
+)
 pause
